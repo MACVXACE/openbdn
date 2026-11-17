@@ -13,8 +13,6 @@ It is a *numerical model*, intended for studying coding, equalisation and
 synchronisation behaviour. It does not model electrode physics, tissue
 impedance, or wet-lab synthesis and sequencing errors.
 
-> Replace `MACVXACE` in the badge URLs with the GitHub account that hosts the
-> repository.
 
 ## Architecture
 
