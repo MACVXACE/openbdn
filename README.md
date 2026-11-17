@@ -39,6 +39,8 @@ impedance, or wet-lab synthesis and sequencing errors.
 | Channel | `openbdn.channel.eq_hbc` | Baseband two-level link, non-stationary coloured EMG interference, NLMS equaliser |
 | Security | `openbdn.crypto.vvtpm` | Mutual learning of two Tree Parity Machines |
 | Integration | `openbdn.pipeline` | `BDNPipeline` chaining storage and channel |
+| Evaluation | `openbdn.benchmark` | SNR, line-code and TPM sweeps with CSV and plot export |
+| Digital twin | `openbdn.app` | Interactive Streamlit dashboard |
 
 ### Storage layer: constrained DNA code
 
@@ -155,7 +157,13 @@ cd openbdn
 pip install .
 ```
 
-For development (adds `pytest`):
+The Streamlit dashboard is an optional extra:
+
+```bash
+pip install ".[app]"
+```
+
+For development (adds `pytest` and the dashboard dependencies):
 
 ```bash
 pip install -e ".[dev]"
@@ -220,6 +228,107 @@ make the strand undecodable, in which case the command reports the failure
 and exits with status 1, for example
 `openbdn transmit "Hello, BDN-04" --snr-db 3 --line-code nrz --seed 7`.
 
+## Benchmark suite
+
+```bash
+openbdn benchmark                      # full sweep, about 30 s
+openbdn benchmark --quick              # reduced sweep, a few seconds
+openbdn benchmark -o results --trials 20 --sync-trials 25 --seed 1
+```
+
+The full run evaluates:
+
+- **Channel:** input SNR from −5 dB to +15 dB in 2.5 dB steps, for both line
+  codes, 8 noise realisations of 4 000 bits each. Every operating point
+  reuses the same payloads and noise seeds, so the curves differ only by the
+  parameter being swept. The equaliser runs decision-directed, with no
+  preamble.
+- **Key agreement:** K ∈ {3, 5, 7} × {Hebbian, anti-Hebbian, random walk},
+  N = 100, L = 3, 10 exchanges each, budget 200 000 steps.
+
+Options: `--output-dir/-o`, `--quick`, `--trials`, `--bits`, `--sync-trials`,
+`--n`, `--max-steps`, `--plots/--no-plots`, `--seed`.
+
+### Output files
+
+Written to `benchmark_results/` by default:
+
+| File | Contents |
+|---|---|
+| `channel_benchmark.csv` | One row per line code and SNR: `line_code, snr_db, trials, bits_per_trial, snr_in_db, snr_out_db, snr_gain_db, ber_unfiltered, ber_filtered, bit_errors_unfiltered, bit_errors_filtered` |
+| `tpm_sync_benchmark.csv` | One row per K and rule: `k, n, l, m, rule, trials, max_steps, synchronized, success_rate, steps_mean, steps_median, steps_std, steps_min, steps_max` |
+| `channel_benchmark.png` | BER and SNR-gain curves |
+| `tpm_sync_benchmark.png` | Synchronisation time by K and rule |
+
+Step statistics cover only the exchanges that synchronised; if none did they
+are written as `nan`.
+
+### Plot previews
+
+Both figures below come from `openbdn benchmark` with the default seed.
+
+![Channel benchmark](docs/images/channel_benchmark.png)
+
+**`channel_benchmark.png`.** *Left:* bit error rate against input SNR on a
+log axis, one colour per line code, dashed before the NLMS filter and solid
+after it. Points where no error was observed sit on the dotted floor at half
+the measurement resolution (1.6 × 10⁻⁵ for 32 000 bits). NRZ falls from 0.22
+to 0.10 at −5 dB and from 5.8 × 10⁻³ to 2.0 × 10⁻³ at 10 dB. Manchester shows
+errors only at −5 and −2.5 dB before filtering and none after. *Right:* SNR
+gain of the equaliser. It is largest when the interference is strongest
+(+17.1 dB Manchester, +8.8 dB NRZ at −5 dB) and shrinks as SNR rises (+7.6 dB
+and +1.0 dB at 15 dB).
+
+![TPM synchronisation benchmark](docs/images/tpm_sync_benchmark.png)
+
+**`tpm_sync_benchmark.png`.** Median steps to full synchronisation (marker)
+with the fastest-to-slowest range (bar), log axis, grouped by K. Median steps
+in the reference run:
+
+| K | Hebbian | Anti-Hebbian | Random walk |
+|---|---|---|---|
+| 3 | 264 | 508 | 303 |
+| 5 | 710 | 2 367 | 1 489 |
+| 7 | 1 742 | 13 880 | 5 437 |
+
+Synchronisation time grows with K for every rule; the anti-Hebbian rule
+grows fastest. With 10 exchanges per cell these medians are indicative, not
+precise: the min–max bars span up to a factor of six.
+
+### From Python
+
+```python
+from openbdn.benchmark import BenchmarkConfig, benchmark_channel, run_benchmark
+
+report = run_benchmark("results", BenchmarkConfig(channel_trials=20, seed=1))
+rows = benchmark_channel(snrs_db=[0, 5], line_codes=["nrz"], num_taps=65)
+```
+
+## Digital twin dashboard
+
+```bash
+pip install ".[app]"
+streamlit run openbdn/app.py      # from the repository root
+openbdn-digital-twin              # equivalent, from anywhere
+```
+
+The dashboard opens in the browser with three tabs:
+
+- **EQ-HBC channel.** Sliders for channel SNR, resting EMG level, contraction
+  rate, EMG spectral corners, filter taps and step size, plus a line-code
+  switch. Every change re-simulates the link and updates four metrics (SNR
+  before and after NLMS with the gain, BER before and after), a zoomable
+  overlay of the transmitted, received and filtered waveforms, and a
+  short-time SNR chart that shows the equaliser converging and the dips
+  caused by muscle contractions.
+- **TPM key exchange.** Choose K, N, L, M, the learning rule and a step
+  budget, then press *Run key exchange*. The weight-overlap curve is redrawn
+  live while Alice and Bob learn; at the end the tab reports steps, weight
+  updates, final overlap and the derived key.
+- **End-to-end transmission.** Type a message to see its DNA strand, GC
+  content, longest homopolymer, equaliser gain and whether it survived the
+  channel.
+
 ## Python API
 
 ```python
@@ -257,26 +366,35 @@ print(report.success, report.snr_gain_db)
 pytest
 ```
 
-The suite (156 tests) covers, among other things:
+The suite (201 tests) covers, among other things:
 
 - exhaustive round-trip of all 8 191 binary strings of length 0–12, plus
   2 000 random strings, with GC and homopolymer limits asserted on each;
 - TPM synchronisation within 20 000 steps for five architectures and all
   three learning rules;
 - exact SNR calibration and spectral colouring of the EMG model, and SNR and
-  bit-error improvement from the NLMS filter in both line codes.
+  bit-error improvement from the NLMS filter in both line codes;
+- the benchmark: sweep coverage, determinism, CSV schema and round-trip,
+  valid PNG output, and edge cases (single points, zero observed errors,
+  exhausted step budgets, invalid arguments);
+- the dashboard, rendered headlessly with Streamlit's `AppTest`, including
+  slider changes and a key exchange started from the button.
 
 ## Project layout
 
 ```
 openbdn/
 ├── __init__.py
+├── app.py
+├── benchmark.py
 ├── cli.py
 ├── pipeline.py
 ├── channel/eq_hbc.py
 ├── crypto/vvtpm.py
 └── storage/dna_codec.py
+docs/images/          # reference benchmark plots
 tests/
+├── test_benchmark.py
 ├── test_channel.py
 ├── test_cli.py
 ├── test_crypto.py

@@ -28,7 +28,7 @@ from openbdn.crypto.vvtpm import SyncResult, VectorValuedTPM, synchronize
 from openbdn.pipeline import BDNPipeline, TransmissionReport
 from openbdn.storage.dna_codec import DNADecodeError, DNAStorageCodec
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 __all__ = [
     "BDNPipeline",

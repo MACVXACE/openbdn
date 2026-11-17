@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openbdn"
-version = "0.1.0"
+version = "0.2.0"
 description = "Simulation SDK for a Biological Data Network (BDN-04): EQ-HBC channel, neural key exchange, and constrained DNA storage coding."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,21 +32,24 @@ classifiers = [
 dependencies = [
     "numpy>=1.24",
     "scipy>=1.10",
+    "matplotlib>=3.7",
     "rich>=13.0",
     "typer>=0.12",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=7.4"]
+app = ["streamlit>=1.37", "pandas>=2.0"]
+dev = ["pytest>=7.4", "streamlit>=1.37", "pandas>=2.0"]
 
 [project.scripts]
 openbdn = "openbdn.cli:app"
+openbdn-digital-twin = "openbdn.app:launch"
 
 [tool.hatch.build.targets.wheel]
 packages = ["openbdn"]
 
 [tool.hatch.build.targets.sdist]
-include = ["openbdn", "tests", "README.md", "LICENSE", "pyproject.toml"]
+include = ["openbdn", "tests", "docs", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

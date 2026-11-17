@@ -5,6 +5,7 @@ Run ``openbdn --help`` for the list of commands.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Optional
 
 import numpy as np
@@ -21,6 +22,7 @@ from rich.progress import (
 from rich.table import Table
 
 from openbdn import __version__
+from openbdn.benchmark import BenchmarkConfig, run_benchmark
 from openbdn.channel.eq_hbc import EQChannelSimulator
 from openbdn.crypto.vvtpm import VectorValuedTPM, synchronize
 from openbdn.pipeline import BDNPipeline
@@ -176,6 +178,108 @@ def transmit(
         Panel(f"{shown}\n\n[dim]{detail}[/]", title="Transmission failed", border_style="red")
     )
     raise typer.Exit(code=1)
+
+
+@app.command("benchmark")
+def benchmark(
+    output_dir: Path = typer.Option(
+        Path("benchmark_results"), "--output-dir", "-o", help="Where to write CSVs and plots."
+    ),
+    quick: bool = typer.Option(
+        False, "--quick", help="Reduced sweep that finishes in a few seconds."
+    ),
+    trials: Optional[int] = typer.Option(
+        None, "--trials", min=1, help="Noise realisations per channel point."
+    ),
+    bits: Optional[int] = typer.Option(None, "--bits", min=1, help="Payload bits per trial."),
+    sync_trials: Optional[int] = typer.Option(
+        None, "--sync-trials", min=1, help="Key exchanges per TPM configuration."
+    ),
+    tpm_n: Optional[int] = typer.Option(None, "--n", min=1, help="TPM inputs per hidden unit."),
+    max_steps: Optional[int] = typer.Option(
+        None, "--max-steps", min=1, help="Step budget per key exchange."
+    ),
+    plots: bool = typer.Option(True, "--plots/--no-plots", help="Render summary PNGs."),
+    seed: int = typer.Option(0, "--seed", help="Master seed."),
+) -> None:
+    """Sweep SNR, line code, and TPM architecture; export CSVs and plots."""
+    base = BenchmarkConfig.quick(seed) if quick else BenchmarkConfig(seed=seed)
+    overrides = {
+        "channel_trials": trials,
+        "bits_per_trial": bits,
+        "sync_trials": sync_trials,
+        "tpm_n": tpm_n,
+        "max_steps": max_steps,
+    }
+    config = BenchmarkConfig(
+        **{**base.__dict__, **{k: v for k, v in overrides.items() if v is not None}}
+    )
+
+    labels = {"channel": "Channel sweep (SNR x line code)", "sync": "TPM sync (K x rule)"}
+    with Progress(
+        TextColumn("[bold]{task.description}"),
+        BarColumn(),
+        TextColumn("{task.completed}/{task.total}"),
+        TimeElapsedColumn(),
+        console=console,
+        transient=True,
+    ) as progress:
+        tasks: dict[str, int] = {}
+
+        def on_progress(stage: str, done: int, total: int) -> None:
+            if stage not in tasks:
+                tasks[stage] = progress.add_task(labels.get(stage, stage), total=total)
+            progress.update(tasks[stage], completed=done)
+
+        try:
+            report = run_benchmark(output_dir, config, make_plots=plots, progress=on_progress)
+        except (ValueError, OSError) as exc:
+            console.print(f"[bold red]Error:[/] {exc}")
+            raise typer.Exit(code=2) from None
+
+    channel = Table(title="Channel: BER and NLMS SNR gain", title_justify="left")
+    channel.add_column("Line code")
+    for heading in ("SNR in (dB)", "SNR out (dB)", "Gain (dB)", "BER before", "BER after"):
+        channel.add_column(heading, justify="right")
+    previous = None
+    for row in report.channel:
+        if previous is not None and row.line_code != previous:
+            channel.add_section()
+        previous = row.line_code
+        channel.add_row(
+            row.line_code,
+            f"{row.snr_db:+.1f}",
+            f"{row.snr_out_db:+.2f}",
+            f"{row.snr_gain_db:+.2f}",
+            f"{row.ber_unfiltered:.5f}",
+            f"{row.ber_filtered:.5f}",
+        )
+    console.print(channel)
+
+    sync = Table(
+        title=f"TPM synchronisation steps (N={config.tpm_n}, L={config.tpm_l})",
+        title_justify="left",
+    )
+    sync.add_column("K", justify="right")
+    sync.add_column("Rule")
+    for heading in ("Synced", "Median", "Mean", "Min", "Max"):
+        sync.add_column(heading, justify="right")
+    for item in report.sync:
+        ok = item.synchronized > 0
+        sync.add_row(
+            str(item.k),
+            item.rule,
+            f"{item.synchronized}/{item.trials}",
+            f"{item.steps_median:,.0f}" if ok else "-",
+            f"{item.steps_mean:,.0f}" if ok else "-",
+            f"{item.steps_min:,.0f}" if ok else "-",
+            f"{item.steps_max:,.0f}" if ok else "-",
+        )
+    console.print(sync)
+
+    console.print("Files written:")
+    for path in report.files.values():
+        console.print(f"  {path}", soft_wrap=True)
 
 
 if __name__ == "__main__":  # pragma: no cover
