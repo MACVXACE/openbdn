@@ -1,6 +1,6 @@
 # OpenBDN
 
-[![CI](https://github.com/your-github-username/openbdn/actions/workflows/ci.yml/badge.svg)](https://github.com/your-github-username/openbdn/actions/workflows/ci.yml)
+[![CI](https://github.com/MACVXACE/openbdn/actions/workflows/ci.yml/badge.svg)](https://github.com/MACVXACE/openbdn/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
 
@@ -13,7 +13,7 @@ It is a *numerical model*, intended for studying coding, equalisation and
 synchronisation behaviour. It does not model electrode physics, tissue
 impedance, or wet-lab synthesis and sequencing errors.
 
-> Replace `your-github-username` in the badge URLs with the GitHub account that hosts the
+> Replace `MACVXACE` in the badge URLs with the GitHub account that hosts the
 > repository.
 
 ## Architecture
@@ -150,7 +150,7 @@ al. (2021).
 Requires Python 3.10 or newer.
 
 ```bash
-git clone https://github.com/your-github-username/openbdn.git
+git clone https://github.com/MACVXACE/openbdn.git
 cd openbdn
 pip install .
 ```
