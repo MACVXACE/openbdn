@@ -257,13 +257,13 @@ def _channel_tab(st, pd) -> None:  # type: ignore[no-untyped-def]
 
     with view:
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("SNR before NLMS", f"{snap.snr_in_db:.1f} dB")
-        m2.metric("SNR after NLMS", f"{snap.snr_out_db:.1f} dB", f"{snap.snr_gain_db:+.1f} dB")
+        m1.metric("SNR before NLMS", f"{round(snap.snr_in_db, 1) + 0.0:.1f} dB")
+        m2.metric("SNR after NLMS", f"{round(snap.snr_out_db, 1) + 0.0:.1f} dB", f"{snap.snr_gain_db:+.1f} dB")
         m3.metric("BER before NLMS", f"{snap.ber_unfiltered:.4f}")
         m4.metric(
             "BER after NLMS",
             f"{snap.ber_filtered:.4f}",
-            f"{snap.ber_filtered - snap.ber_unfiltered:+.4f}",
+            f"{snap.ber_filtered - snap.ber_unfiltered:+.4f}" if snap.ber_filtered != snap.ber_unfiltered else None,
             delta_color="inverse",
         )
 
